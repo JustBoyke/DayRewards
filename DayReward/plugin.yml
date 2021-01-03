@@ -1,0 +1,6 @@
+name: "DayReward"
+main: me.boykev.dayreward.Main
+version: "1.0"
+author: boykev
+website: www.gewoonboyke.nl
+api: "1.16"
