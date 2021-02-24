@@ -15,6 +15,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import net.ess3.api.events.AfkStatusChangeEvent;
 import net.md_5.bungee.api.ChatColor;
 import net.milkbowl.vault.economy.Economy;
 
@@ -96,6 +97,21 @@ public class Main extends JavaPlugin implements Listener{
 		int task = tasklist.get(e.getPlayer()).getTaskId();
 		Bukkit.getScheduler().cancelTask(task);
 		System.out.println("Player " + e.getPlayer().getName() + "has logged out");
+	}
+	
+	@EventHandler
+	public void afkChange(AfkStatusChangeEvent e) {
+		@SuppressWarnings("deprecation")
+		Player p = e.getAffected().getBase();
+		if(e.getValue() == true) {
+			int task = tasklist.get(p).getTaskId();
+			Bukkit.getScheduler().cancelTask(task);
+			p.sendMessage(ChatColor.RED + "Je bent AFK, je ontvangt geen geld meer.");
+			return;
+		}
+		this.moneyGiver(p);
+		p.sendMessage(ChatColor.GREEN + "Je bent niet meer AFK, elke 30 minuten ontvang je geld voor je online time.");
+		return;
 	}
 	
 }
