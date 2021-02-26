@@ -50,6 +50,7 @@ public class Main extends JavaPlugin implements Listener{
 	
 	public HashMap<Player, Integer> mon = new HashMap<Player, Integer>();
 	public HashMap<Player, BukkitTask> tasklist = new HashMap<Player, BukkitTask>();
+	public HashMap<Player, BukkitTask> afklist = new HashMap<Player, BukkitTask>();
 	
 	public void moneyGiver(Player p) {
 		BukkitTask task = new BukkitRunnable() {
@@ -60,6 +61,51 @@ public class Main extends JavaPlugin implements Listener{
 			}
 		}.runTaskTimerAsynchronously(this, 36000, 36000);
 		tasklist.put(p, task);
+	}
+	public void afkPayer(Player p) {
+		um = new UserManager(this, p);
+		BukkitTask task = new BukkitRunnable() {
+			@Override
+			public void run() {
+				int cpoints = um.getConfig().getInt("afk.points");
+				int calc = cpoints + 1;
+				um.editConfig().set("afk.points", calc);
+				um.save();
+				p.sendMessage(ChatColor.RED + "Je hebt 1 afk punt gekregen.");
+				p.sendMessage(ChatColor.AQUA + "je hebt nu " + ChatColor.RED + calc + ChatColor.AQUA + " AFK Punten.");
+				if(econ.getBalance(p) < 1500) {
+					p.kickPlayer(ChatColor.RED + "Je hebt niet voldoende balance om langer AFK te kunnen staan!" + ChatColor.AQUA + "\nMinimaal 1500 nodig.");
+					Bukkit.broadcastMessage(ChatColor.YELLOW + p.getName() + " is gekicked voor AFK");
+				}
+			}
+		}.runTaskTimerAsynchronously(this, 36000, 36000);
+		afklist.put(p, task);
+	}
+	
+	public void payAFK(Player p){
+		um = new UserManager(this, p);
+		int afkpoints = um.getConfig().getInt("afk.points");
+		if(afkpoints > 5) {
+			new BukkitRunnable() {
+				@Override
+				public void run() {
+					int calc = afkpoints * 850;
+					Bukkit.broadcastMessage(String.valueOf(calc));
+					double money = econ.getBalance(p);
+					Bukkit.broadcastMessage(String.valueOf(money));
+					if(money < calc) {
+						p.sendMessage(ChatColor.RED + "Je hebt onvoldoende geld om je AFK punten te betalen!, de volgende keer dat je inlogt wordt dit opnieuw geprobeerd");
+						this.cancel();
+						return;
+					}
+					econ.withdrawPlayer(p, calc);
+					p.sendMessage(ChatColor.RED + "Je hebt " + ChatColor.AQUA + calc + ChatColor.RED + " betaald voor je AFK punten!");
+					um.editConfig().set("afk.points", 0);
+					um.save();
+				}
+			}.runTaskLater(this, 60);
+		}
+		
 	}
 
 	@EventHandler
@@ -90,12 +136,20 @@ public class Main extends JavaPlugin implements Listener{
 		this.moneyGiver(p);
 		p.sendMessage(ChatColor.GREEN + "Welkom terug op de server :) elke 30 minuten krijg je gratis geld voor je online time!");
 		System.out.println("Player " + p.getName() + "has logged in");
+		this.payAFK(p);
 	}
 	
 	@EventHandler
 	public void onLeave(PlayerQuitEvent e) {
-		int task = tasklist.get(e.getPlayer()).getTaskId();
-		Bukkit.getScheduler().cancelTask(task);
+		if(tasklist.containsKey(e.getPlayer())) {
+			int task = tasklist.get(e.getPlayer()).getTaskId();
+			Bukkit.getScheduler().cancelTask(task);
+		}
+		
+		if(afklist.containsKey(e.getPlayer())) {
+			int task = afklist.get(e.getPlayer()).getTaskId();
+			Bukkit.getScheduler().cancelTask(task);
+		}
 		System.out.println("Player " + e.getPlayer().getName() + "has logged out");
 	}
 	
@@ -103,13 +157,32 @@ public class Main extends JavaPlugin implements Listener{
 	public void afkChange(AfkStatusChangeEvent e) {
 		@SuppressWarnings("deprecation")
 		Player p = e.getAffected().getBase();
+		double money = econ.getBalance(p);
+		if(money < 850 && e.getValue() == true) {
+			p.kickPlayer(ChatColor.RED + "Je hebt niet voldoende balance om AFK te kunnen staan!" + ChatColor.AQUA + "\nMinimaal 850 nodig.");
+			Bukkit.broadcastMessage(ChatColor.YELLOW + p.getName() + " is gekicked voor AFK");
+			return;
+		}
+		um = new UserManager(this, p);
+		int afkpoints = um.getConfig().getInt("afk.points");
+		int pcalc = afkpoints * 850;
+		
+		if(money < pcalc && e.getValue() == true) {
+			p.kickPlayer(ChatColor.RED + "Je hebt niet voldoende balance om AFK te kunnen staan!" + ChatColor.AQUA + "\nJe moet nog " + pcalc + " afbetalen!");
+			Bukkit.broadcastMessage(ChatColor.YELLOW + p.getName() + " is gekicked voor AFK");
+			return;
+		}
+		
 		if(e.getValue() == true) {
 			int task = tasklist.get(p).getTaskId();
 			Bukkit.getScheduler().cancelTask(task);
 			p.sendMessage(ChatColor.RED + "Je bent AFK, je ontvangt geen geld meer.");
+			this.afkPayer(p);
 			return;
 		}
 		this.moneyGiver(p);
+		int task = afklist.get(p).getTaskId();
+		Bukkit.getScheduler().cancelTask(task);
 		p.sendMessage(ChatColor.GREEN + "Je bent niet meer AFK, elke 30 minuten ontvang je geld voor je online time.");
 		return;
 	}
